@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Duplicate of /privacy-policy — kept for reference, not for indexing
+Disallow: /privacy-policy-mobile
+
+Sitemap: https://duonoxx.com/sitemap.xml
