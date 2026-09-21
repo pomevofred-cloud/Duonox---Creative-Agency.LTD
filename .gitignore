@@ -19,3 +19,8 @@ node_modules/
 # Local backups / archived exports
 *.af
 *.bak
+
+# Google Sans source (TTF) — kept locally; the deployed webfont is the derived
+# woff2 in assets/fonts/. Un-ignore if you want the source tracked in git.
+Google_Sans_Flex/
+public_html.zip
