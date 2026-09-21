@@ -11,3 +11,11 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Tooling / caches
+.trace-mcp/
+node_modules/
+
+# Local backups / archived exports
+*.af
+*.bak

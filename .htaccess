@@ -1,7 +1,9 @@
-Options -MultiViews
+Options -MultiViews -Indexes
 RewriteEngine On
 
-# Canonical host + HTTPS in a SINGLE hop.
+# ============================================================================
+# 1. CANONICAL HOST + HTTPS (single hop)
+# ============================================================================
 # Sends http://, www.duonoxx.com, and the old *.hostingersite.com URL all to
 # https://duonoxx.com/... with one 301 (no redirect chains, which leak link equity).
 RewriteCond %{HTTPS} !=on [OR]
@@ -26,11 +28,105 @@ RewriteRule ^(.+?)/?$ $1.html [L]
 # request line), so this internal call to /404.html will not be redirected.
 ErrorDocument 404 /404.html
 
-# Caching for static assets
+# ============================================================================
+# 2. SECURITY HEADERS
+# ============================================================================
+<IfModule mod_headers.c>
+  # Force HTTPS for one year on this host + subdomains (site already 301s to HTTPS).
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+  # Stop MIME-type sniffing.
+  Header always set X-Content-Type-Options "nosniff"
+
+  # Clickjacking protection (CSP frame-ancestors is the modern equivalent; keep both).
+  Header always set X-Frame-Options "DENY"
+
+  # Limit referrer leakage to other origins.
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # Deny powerful browser features this site does not use.
+  Header always set Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()"
+
+  # Isolate the browsing context (links use rel=noopener already).
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+
+  # Content-Security-Policy.
+  # NOTE: transitional — still allows the Google Fonts CDN (gstatic/googleapis) and
+  # the prebuiltui galaxy image. Both external deps are removed later in the
+  # hardening work; once done, tighten img-src/font-src/style-src to 'self'.
+  # 'unsafe-inline' is required by the site's inline <style>/<script> blocks and
+  # 14 inline style="" attributes; there are ZERO inline event handlers.
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://assets.prebuiltui.com; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self' https://formsubmit.co; form-action 'self' https://formsubmit.co; frame-src 'self'; manifest-src 'self'; upgrade-insecure-requests"
+
+  # Do not advertise the exact server/engine versions.
+  Header unset X-Powered-By
+  Header always unset X-Powered-By
+</IfModule>
+
+# ============================================================================
+# 3. COMPRESSION (text assets; woff2/webp/avif are already compressed)
+# ============================================================================
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml
+  AddOutputFilterByType DEFLATE application/javascript application/x-javascript text/javascript
+  AddOutputFilterByType DEFLATE application/json application/xml application/rss+xml
+  AddOutputFilterByType DEFLATE image/svg+xml image/x-icon
+  AddOutputFilterByType DEFLATE font/ttf font/otf application/vnd.ms-fontobject
+</IfModule>
+
+# ============================================================================
+# 4. CORRECT MIME TYPES
+# ============================================================================
+<IfModule mod_mime.c>
+  AddType font/woff2 .woff2
+  AddType font/woff .woff
+  AddType font/ttf .ttf
+  AddType image/webp .webp
+  AddType image/avif .avif
+  AddType image/svg+xml .svg
+  AddType application/manifest+json .webmanifest
+</IfModule>
+
+# ============================================================================
+# 5. CACHING
+# ============================================================================
 <IfModule mod_expires.c>
   ExpiresActive On
-  ExpiresByType image/png "access plus 1 year"
-  ExpiresByType image/x-icon "access plus 1 year"
-  ExpiresByType image/jpeg "access plus 1 year"
   ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/avif "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType image/x-icon "access plus 1 year"
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/javascript "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType font/woff "access plus 1 year"
+  ExpiresByType font/ttf "access plus 1 year"
+</IfModule>
+
+<IfModule mod_headers.c>
+  # HTML must always revalidate (content changes on deploy).
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  # Static assets are content-hashed in their filenames, so they can be immutable.
+  <FilesMatch "\.(css|js|woff2|woff|ttf|webp|avif|jpg|jpeg|png|gif|svg|ico)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
+# ============================================================================
+# 6. BLOCK ACCESS TO SENSITIVE / NON-PUBLIC FILES
+# ============================================================================
+# Dotfiles (e.g. .git, .DS_Store) — but keep .well-known reachable.
+RewriteCond %{REQUEST_URI} !^/\.well-known/
+RewriteRule "(^|/)\." - [F]
+
+<IfModule mod_authz_core.c>
+  <FilesMatch "\.(zip|af|bak|log|sql|md|ttf~)$">
+    Require all denied
+  </FilesMatch>
 </IfModule>
